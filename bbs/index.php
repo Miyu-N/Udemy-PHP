@@ -4,13 +4,31 @@ require('library.php');
 require('dbconnect.php');
 
 if (isset($_SESSION['id']) && isset($_SESSION['name'])) {//sessionの情報があれば（ログインしてたら）
+    $id = $_SESSION['id'];
     $name = $_SESSION['name'];//続行
 } else {
     header('Location: login.php');
     exit();
 }
 
-$name = $_SESSION['name'];
+$db = dbconnect();
+
+//メッセージの投稿
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $message = filter_input(INPUT_POST,'message', FILTER_SANITIZE_STRING);
+    $stmt = $db->prepare('insert into posts (message, member_id) values(?, ?)');
+        if (!$stmt) {
+            die($db->error);
+        }
+        $stmt->bind_param('si', $message, $id);
+        $success = $stmt->execute();
+        if (!$success) {
+            die($db->error);
+        }
+
+        header('Location: index.php');//読み込むたびにデータが追加されるのを防ぐために、自分自身にheaderで飛ばしてpostの内容をクリア
+        exit();
+}
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -45,13 +63,33 @@ $name = $_SESSION['name'];
             </div>
         </form>
 
+        <?php 
+        $stmt = $db->prepare('select p.id, p.member_id, p.message, p.created, m.name, m.picture 
+                                from posts p, members m
+                                where m.id=p.member_id
+                                order by id desc'
+                            );
+        if (!$stmt) {
+            die($db->error);
+        }
+        $success = $stmt->execute();
+        if (!$success) {
+            die($db->error);
+        }
+
+        $stmt->bind_result($id, $member_id, $message, $created, $name, $picture);
+        while ($stmt->fetch()):
+        ?>
         <div class="msg">
-            <img src="member_picture/" width="48" height="48" alt=""/>
-            <p>○○<span class="name">（○○）</span></p>
-            <p class="day"><a href="view.php?id=">2021/01/01 00:00:00</a>
+            <?php if ($picture): ?>
+                <img src="member_picture/<?php echo h($picture); ?>" width="48" height="48" alt=""/>
+            <?php endif; ?>
+            <p><?php  echo h($message); ?><span class="name">（<?php echo h($name); ?>）</span></p>
+            <p class="day"><a href="view.php?id="><?php echo h($created); ?></a>
                 [<a href="delete.php?id=" style="color: #F33;">削除</a>]
             </p>
         </div>
+        <?php endwhile; ?>
     </div>
 </div>
 </body>
